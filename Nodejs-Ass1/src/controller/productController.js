@@ -1,6 +1,5 @@
 const User = require("../models/userModel");
 const Product = require("../models/productModel");
-const bcrypt = require("bcryptjs");
 const mongoose = require("mongoose");
 const roleModel = require("../models/roleModel");
 const jwt = require("jsonwebtoken");
@@ -41,8 +40,13 @@ const addProduct = async (req, res) => {
     createdBy: req.body.userId,
   });
 
+  //authorization
+  if (req.userid !== req.body.userId) {
+    return res.status(403).send({ status: false, mesaage: "you are not authorized" })
+  }
+
   try {
-    //validation of user input
+    //validation of product input
     const { error } = await productSchema.validateAsync(req.body);
     if (error) {
       res.status(400).send(error.details[0].msg);
@@ -60,22 +64,28 @@ const addProduct = async (req, res) => {
   } catch (err) {
     return res
       .status(500)
-      .send({ status: false, message: "Error", err: err.message });
+      .send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
 const getProducts = async (req, res) => {
   try {
-    const productDetails = await Product.find({ isDeleted: false });
+    //authorization
+    if (req.role !== "User") {
+    return res
+    .status(403)
+    .send({ status: false, mesaage: "you are not authorized" })
+    }
+    const productsDetails = await Product.find({ isDeleted: false });
     return res
       .status(200)
       .send({
         status: true,
-        message: "product details fetched",
-        data: productDetails,
+        message: "products details fetched",
+        data: productsDetails,
       });
   } catch (err) {
-    res.status(500).send({ status: false, msg: "Error", err: err.msg });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
@@ -87,21 +97,28 @@ const getProductById = async (req, res) => {
     if (!isValidObjectId(Id)) {
       return res
         .status(400)
-        .send({ status: false, message: "please enter valid  userId" });
+        .send({ status: false, message: "Invalid Id" });
     }
 
-    //checking Id exists nor not
+    //checking Id exists or not
     const productData = await Product.findById({ _id: Id });
 
+    //authorization
+    if (req.role !== "User") {
+      return res
+      .status(403)
+      .send({ status: false, mesaage: "you are not authorized" })
+    }
+
     if (!productData) {
-      return res.status(404).send({ status: false, message: "data not found" });
+      return res.status(404).send({ status: false, message: "product data not found" });
     } else {
       return res
         .status(200)
         .send({ status: true, message: "Product  details", data: productData });
     }
   } catch (err) {
-    res.status(500).send({ status: false, msg: "Error", err: err.msg });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
@@ -111,7 +128,14 @@ const updateProductById = async (req, res) => {
   if (!isValidObjectId(Id)) {
     return res
       .status(400)
-      .send({ status: false, message: "please enter valid  userId" });
+      .send({ status: false, message: "Invalid Id" });
+  }
+
+  //authorization
+  if (req.role !== "User") {
+    return res
+    .status(403)
+    .send({ status: false, mesaage: "you are not authorized" })
   }
 
   try {
@@ -134,9 +158,11 @@ const updateProductById = async (req, res) => {
         });
     }
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
+
+
 const deleteProductById = async (req, res) => {
   try {
     const Id = req.params.Id;
@@ -144,13 +170,20 @@ const deleteProductById = async (req, res) => {
     if (!isValidObjectId(Id)) {
       return res
         .status(400)
-        .send({ status: false, message: "please enter valid  userId" });
+        .send({ status: false, message: "Invalid Id" });
     }
-    //checking Id exists nor not
+
+    //authorization
+   if (req.role !== "User") {
+     return res
+       .status(403)
+       .send({ status: false, mesaage: "you are not authorized" })
+   }
+    //checking product exists or not
     const productData = await Product.findById({ _id: Id });
 
     if (!productData) {
-      return res.status(404).send({ status: false, message: "data not found" });
+      return res.status(404).send({ status: false, message: "product not found" });
     }
 
     const deleteDetails = await Product.findByIdAndUpdate(
@@ -166,12 +199,18 @@ const deleteProductById = async (req, res) => {
         data: deleteDetails,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
 const deleteProducts = async (req, res) => {
   try {
+    //authorization
+    if (req.role !== "User") {
+    return res
+      .status(403)
+      .send({ status: false, mesaage: "you are not authorized" })
+    }
     const deleteDetails = await Product.updateMany(
       { isDeleted: false },
       { $set: { isDeleted: true } },
@@ -185,12 +224,20 @@ const deleteProducts = async (req, res) => {
         data: deleteDetails,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
 const getPublishedProducts = async (req, res) => {
   try {
+
+    //authorization
+    if (req.role !== "User") {
+    return res
+      .status(403)
+      .send({ status: false, mesaage: "you are not authorized" })
+    }
+
     const filterQuery = { isDeleted: false, isPublished: true };
     const getPublishedData = await Product.find(filterQuery);
 
@@ -198,25 +245,31 @@ const getPublishedProducts = async (req, res) => {
       .status(200)
       .send({
         status: true,
-        message: "get published product successfully",
+        message: "fetched all published product successfully",
         data: getPublishedData,
       });
   } catch (err) {
     return res
       .status(500)
-      .send({ status: false, message: "Error", err: err.message });
+      .send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
-const getProductbyName = async (req, res) => {
+const getProductsbyName = async (req, res) => {
   try {
     const filterQuery = { isDeleted: false };
     const queryParams = req.query;
     const { name } = queryParams;
-    // const name = req.query.name
-    // filterQuery["name"] = name
+    
     if (!isValid(name)) {
       filterQuery["name"] = name;
+    }
+
+    //authorization
+    if (req.role !== "User") {
+    return res
+      .status(403)
+      .send({ status: false, mesaage: "you are not authorized" })
     }
 
     const getDataByName = await Product.find(queryParams, filterQuery);
@@ -224,13 +277,13 @@ const getProductbyName = async (req, res) => {
       .status(200)
       .send({
         status: true,
-        message: "details fetched with name successfully",
+        message: "product details fetched with name successfully",
         data: getDataByName,
       });
   } catch (err) {
     return res
       .status(500)
-      .send({ status: false, message: "Error", err: err.message });
+      .send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
@@ -242,5 +295,5 @@ module.exports = {
   deleteProductById,
   deleteProducts,
   getPublishedProducts,
-  getProductbyName,
+  getProductsbyName,
 };

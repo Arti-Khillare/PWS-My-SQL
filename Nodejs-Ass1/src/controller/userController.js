@@ -21,8 +21,8 @@ const isValidObjectId = function (ObjectId) {
 };
 
 const addAdmin = async (req, res) => {
-  const emailExist = await User.findOne({ email: req.body.email });
-  if (emailExist) {
+  const isemailExist = await User.findOne({ email: req.body.email });
+  if (isemailExist) {
     return res
       .status(400)
       .send({ status: false, msg: "email is already registered" });
@@ -58,13 +58,13 @@ const addAdmin = async (req, res) => {
         .status(200)
         .send({
           status: true,
-          msg: "User created successfully",
+          msg: "AdminUser created successfully",
           data: saveAdmin,
         });
     }
   } catch (err) {
-    res.status(500).send({ status: false, msg: "Error", data: err.msg });
-    console.log(err);
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
+    //console.log(err);
   }
 };
 
@@ -76,8 +76,8 @@ const addUser = async (req, res) => {
       .send({ status: false, message: "Unauthrized Access" });
   }
 
-  const emailExist = await User.findOne({ email: req.body.email });
-  if (emailExist) {
+  const isemailExist = await User.findOne({ email: req.body.email });
+  if (isemailExist) {
     res.status(400).send({ status: false, msg: "email is already registered" });
     return;
   }
@@ -119,12 +119,12 @@ const addUser = async (req, res) => {
             data: saveUser,
           });
       } else {
-        res.status(200).send({ status: false, msg: "check role" });
+        res.status(400).send({ status: false, msg: "user is not allowed as it doesnt have access" });
       }
     }
   } catch (err) {
-    res.status(500).send({ status: false, msg: "Error", data: err.msg });
-    console.log(err);
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
+    //console.log(err);
   }
 };
 
@@ -133,11 +133,11 @@ const loginUser = async (req, res) => {
     const requestBody = req.body;
     const { email, password } = requestBody;
 
-    const chectexistUser = await User.findOne({ email: email });
-    if (chectexistUser) {
+    const checkExistUser = await User.findOne({ email: email });
+    if (checkExistUser) {
       const checkPassword = await bcrypt.compare(
         password,
-        chectexistUser.password
+        checkExistUser.password
       );
       if (!checkPassword) {
         return res
@@ -147,55 +147,59 @@ const loginUser = async (req, res) => {
     } else {
       return res
         .status(400)
-        .send({ status: false, message: `email or password is incorrect` });
+        .send({ status: false, message: `user with email:${email} not exist` });
     }
 
     const token = jwt.sign(
       {
-        userid: chectexistUser._id,
-        role: chectexistUser.role,
+        userid: checkExistUser._id,
+        role: checkExistUser.role,
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + 60 * 60 * 60,
       },
       "secretKey"
     );
-    //res.setHeader("Authorization", token);
     res.setHeader("x-access-token", token);
     const tokenData = {
-      userId: chectexistUser._id,
-      role: chectexistUser.role,
+      userId: checkExistUser._id,
+      role: checkExistUser.role,
       token: token,
     };
     res
       .status(200)
       .send({ status: true, msg: "login successfully", data: tokenData });
   } catch (err) {
-    res.status(500).send({ status: false, msg: "Error", data: err.msg });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
     console.log(err);
   }
 };
 
-const getProductByUserId = async (req, res) => {
+const getProductsByUserId = async (req, res) => {
   try {
     const userId = req.params.userId;
 
     if (!isValidObjectId(userId)) {
       return res
         .status(400)
-        .send({ status: false, message: "please enter valid id" });
+        .send({ status: false, message: "Invalid userId" });
     }
 
-    const userExist = await User.findById({ _id: userId });
+    //authorization
+    if (req.userid !== userId) {
+      return res.status(403).send({ status: false, mesaage: "you are not authorized" })
+    }
 
-    if (!userExist) {
+    const isuserExist = await User.findById({ _id: userId });
+
+    if (!isuserExist) {
       return res
         .status(400)
-        .send({ status: false, message: " user data not found" });
+        .send({ status: false, message: "user not found" });
     }
 
-    const productExist = await Product.find({ userId: userId });
+    const isproductExist = await Product.find({ userId: userId });
 
-    if (!productExist) {
+    if (!isproductExist) {
       return res
         .status(400)
         .send({ status: false, message: "product data not found" });
@@ -204,11 +208,11 @@ const getProductByUserId = async (req, res) => {
       .status(200)
       .send({
         status: true,
-        message: "all products by userId",
-        data: productExist,
+        message: "fetched all products by userId",
+        data: isproductExist,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
@@ -219,15 +223,20 @@ const updateUserbyId = async (req, res) => {
     if (!isValidObjectId(id)) {
       return res
         .status(400)
-        .send({ status: false, message: "please enter valid id" });
+        .send({ status: false, message: "Invalid id" });
     }
 
-    const userExist = await User.findById({ _id: id });
+    //authorization
+    if (req.userid !== id) {
+      return res.status(403).send({ status: false, mesaage: "you are not authorized" })
+    }
 
-    if (!userExist) {
+    const isuserExist = await User.findById({ _id: id });
+
+    if (!isuserExist) {
       return res
         .status(400)
-        .send({ status: false, message: " user data not found" });
+        .send({ status: false, message: "user not found" });
     }
 
     const updateDetails = await User.findByIdAndUpdate(
@@ -239,11 +248,11 @@ const updateUserbyId = async (req, res) => {
       .status(200)
       .send({
         status: true,
-        message: "update user successfully",
+        message: "updated user successfully",
         data: updateDetails,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
@@ -254,15 +263,20 @@ const addProductByUserId = async (req, res) => {
     if (!isValidObjectId(userId)) {
       return res
         .status(400)
-        .send({ status: false, message: "please enter valid id" });
+        .send({ status: false, message: "Invalid userId" });
     }
 
-    const userExist = await User.findById({ _id: userId });
+    //authorization
+    if (req.userid !== userId) {
+      return res.status(403).send({ status: false, mesaage: "you are not authorized" })
+    }
 
-    if (!userExist) {
+    const isuserExist = await User.findById({ _id: userId });
+
+    if (!isuserExist) {
       return res
         .status(400)
-        .send({ status: false, message: " user data not found" });
+        .send({ status: false, message: "user not found" });
     }
 
     const addProduct = await Product.findOneAndUpdate(
@@ -278,7 +292,7 @@ const addProductByUserId = async (req, res) => {
         data: addProduct,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
@@ -286,28 +300,46 @@ const updateProductByUserIdandProductId = async (req, res) => {
   try {
     const userId = req.params.userId;
     const productId = req.body.productId;
+
     if (!isValidObjectId(userId)) {
       return res
         .status(400)
-        .send({ status: false, message: "please enter valid id" });
+        .send({ status: false, message: "Invali userId" });
     }
 
-    const userExist = await User.findById({ _id: userId });
+    //authorization
+    if (req.userid !== userId) {
+      return res.status(403).send({ status: false, mesaage: "you are not authorized" })
+    }
 
-    if (!userExist) {
+    const isuserExist = await User.findById({ _id: userId });
+
+    if (!isuserExist) {
       return res
         .status(400)
-        .send({ status: false, message: " user data not found" });
+        .send({ status: false, message: "user not found" });
     }
 
     const productExist = await Product.findById(productId);
 
-    if (!productExist) {
+    // if (!productExist || productExist.userId != userId) {
+    //   return res
+    //     .status(400)
+    //     .send({ status: false, message: "product not found" });
+    // }
+
+    if(productExist) {
+      if(productExist.userId != userId) {
+        return res
+        .status(400)
+        .send({status:false, message:"this product is not belongs to this userid "})
+      }
+    }
+    else {
       return res
         .status(400)
-        .send({ status: false, message: " product data not found" });
+        .send({ status: false, message: "product not found" });
     }
-
     const updateDetails = await Product.findOneAndUpdate(
       { userId: userId },
       { $set: req.body },
@@ -317,21 +349,21 @@ const updateProductByUserIdandProductId = async (req, res) => {
       .status(200)
       .send({
         status: true,
-        message: " updated successfully",
+        message: "product updated successfully",
         data: updateDetails,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
 
-const getAllProduct = async (req, res) => {
+const getAllProducts = async (req, res) => {
   try {
     const roleFromToken = req.body.role;
     if (req.role != roleFromToken) {
       return res
         .status(400)
-        .send({ status: false, message: "Unauthrized Access" });
+        .send({ status: false, message: "Unauthorized Access" });
     }
     let price = req.query.price;
     let rating = req.query.rating;
@@ -352,20 +384,21 @@ const getAllProduct = async (req, res) => {
       .status(200)
       .send({
         status: true,
-        message: "get prouduct details based on sort",
+        message: "fetched product details based on sort successfully",
         data: result,
       });
   } catch (err) {
-    res.status(500).send({ status: false, message: "Error", err: err.message });
+    res.status(500).send({ status: false, message: "Server Error", err: err.message });
   }
 };
+
 module.exports = {
   addAdmin,
   addUser,
   loginUser,
-  getProductByUserId,
+  getProductsByUserId,
   updateUserbyId,
   addProductByUserId,
   updateProductByUserIdandProductId,
-  getAllProduct,
+  getAllProducts,
 };
